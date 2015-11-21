@@ -47,6 +47,14 @@ var AudioRecorder = {
         }
       }
     );
+
+    this.ErrorSubscription = NativeAppEventEmitter.addListener('recordingError',
+      (data) => {
+        if (this.onError) {
+          this.onError(data);
+        }
+      }
+    );
   },
   startRecording: function() {
     AudioRecorderManager.startRecording();
@@ -59,6 +67,9 @@ var AudioRecorder = {
     if (this.subscription) {
       this.subscription.remove();
     }
+  },
+  deleteRecording: function() {
+    AudioRecorderManager.deleteRecording();
   },
   playRecording: function() {
     AudioRecorderManager.playRecording();

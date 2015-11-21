@@ -14,6 +14,7 @@
 
 NSString *const AudioRecorderEventProgress = @"recordingProgress";
 NSString *const AudioRecorderEventFinished = @"recordingFinished";
+NSString *const AudioRecorderEventError = @"recordingError";
 
 @implementation AudioRecorderManager {
 
@@ -66,8 +67,50 @@ RCT_EXPORT_MODULE();
 }
 
 - (void)audioRecorderDidFinishRecording:(AVAudioRecorder *)recorder successfully:(BOOL)flag {
-  [self.bridge.eventDispatcher sendAppEventWithName:AudioRecorderEventFinished body:@{
-      @"status": flag ? @"OK" : @"ERROR"
+  if (!flag) {
+    [self.bridge.eventDispatcher sendAppEventWithName:AudioRecorderEventFinished body:@{
+          @"status": @"ERROR"
+        }];
+  }
+  
+  NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:[_audioRecorder.url path] error:nil];
+  
+  typeof(self) __weak weakSelf = self;
+  AVURLAsset *asset = [AVURLAsset assetWithURL:_audioRecorder.url];
+  [asset loadValuesAsynchronouslyForKeys:[NSArray arrayWithObjects:@"duration", nil]
+      completionHandler: ^{
+        BOOL done = NO;
+        switch ([asset statusOfValueForKey:@"duration" error: nil]) {
+          case AVKeyValueStatusLoaded:
+          case AVKeyValueStatusCancelled:
+          case AVKeyValueStatusFailed:
+            done = YES;
+          default:;
+            // nothing to do
+        }
+        
+        if (!done) {
+          return;
+        }
+
+        [weakSelf _emitEventWithName: AudioRecorderEventFinished
+           body:@{
+              @"status": @"OK",
+              @"uri": [_audioRecorder.url absoluteString],
+              @"duration":[NSNumber numberWithFloat: CMTimeGetSeconds([asset duration])],
+              @"size":  [NSNumber numberWithUnsignedLongLong: [attributes fileSize]]
+            }];
+      }];
+}
+
+- (void)_emitEventWithName:(NSString*) eventName body:(NSDictionary*) body {
+  [self.bridge.eventDispatcher sendAppEventWithName:eventName body:body];
+}
+
+- (void)audioRecorderEncodeErrorDidOccur:(AVAudioRecorder *)recorder error:(NSError *) error {
+  [self.bridge.eventDispatcher sendAppEventWithName:
+      AudioRecorderEventError body:@{
+      @"error": error.localizedDescription
     }];
 }
 
@@ -89,16 +132,28 @@ RCT_EXPORT_METHOD(prepareRecordingAtPath:(NSString *)path)
   _audioFileURL = [NSURL fileURLWithPath:audioFilePath];
 
   NSDictionary *recordSettings = [NSDictionary dictionaryWithObjectsAndKeys:
-          [NSNumber numberWithInt:AVAudioQualityHigh], AVEncoderAudioQualityKey,
-          [NSNumber numberWithInt:16], AVEncoderBitRateKey,
-          [NSNumber numberWithInt: 2], AVNumberOfChannelsKey,
-          [NSNumber numberWithFloat:44100.0], AVSampleRateKey,
+           [NSNumber numberWithInt:kAudioFormatMPEG4AAC], AVFormatIDKey,
+           [NSNumber numberWithInt: 1], AVNumberOfChannelsKey,
+           [NSNumber numberWithFloat:16000.0], AVSampleRateKey,
           nil];
 
   NSError *error = nil;
 
   _recordSession = [AVAudioSession sharedInstance];
-  [_recordSession setCategory:AVAudioSessionCategoryPlayAndRecord error:nil];
+  [_recordSession setCategory:AVAudioSessionCategoryPlayAndRecord error:&error];
+  
+  if (error) {
+    NSLog(@"error: %@", [error localizedDescription]);
+    // TODO: dispatch error over the bridge
+    return;
+  }
+  
+  [_recordSession setActive:YES error:&error];
+  if (error) {
+    NSLog(@"error: %@", [error localizedDescription]);
+    // TODO: dispatch error over the bridge
+    return;
+  }
 
   _audioRecorder = [[AVAudioRecorder alloc]
                 initWithURL:_audioFileURL
@@ -111,17 +166,24 @@ RCT_EXPORT_METHOD(prepareRecordingAtPath:(NSString *)path)
       NSLog(@"error: %@", [error localizedDescription]);
       // TODO: dispatch error over the bridge
     } else {
-      [_audioRecorder prepareToRecord];
+      BOOL successfully = [_audioRecorder prepareToRecord];
+      if (!successfully) {
+        NSLog(@"fail to prepare to record");
+      }
   }
 }
 
 RCT_EXPORT_METHOD(startRecording)
 {
-  if (!_audioRecorder.recording) {
-    [self startProgressTimer];
-    [_recordSession setActive:YES error:nil];
-    [_audioRecorder record];
-
+  if (_audioRecorder.recording) {
+    return;
+  }
+  
+  
+  [self startProgressTimer];
+  BOOL successfully = [_audioRecorder record];
+  if (!successfully) {
+    NSLog(@"fail to record");
   }
 }
 
@@ -131,6 +193,13 @@ RCT_EXPORT_METHOD(stopRecording)
     [_audioRecorder stop];
     [_recordSession setActive:NO error:nil];
     _prevProgressUpdateTime = nil;
+  }
+}
+
+RCT_EXPORT_METHOD(deleteRecording)
+{
+  if (!_audioRecorder.recording) {
+    [_audioRecorder deleteRecording];
   }
 }
 
