@@ -45,6 +45,7 @@ var AudioRecorder = {
         if (this.onFinished) {
           this.onFinished(data);
         }
+        this._removeSubscriptions();
       }
     );
 
@@ -53,6 +54,7 @@ var AudioRecorder = {
         if (this.onError) {
           this.onError(data);
         }
+        this._removeSubscriptions();
       }
     );
 
@@ -62,6 +64,12 @@ var AudioRecorder = {
       errorSubscription
     ];
   },
+
+  _removeSubscriptions: function() {
+    this.subscriptions.forEach(sub => sub.remove());
+    this.subscriptions = null;
+  },
+
   startRecording: function() {
     AudioRecorderManager.startRecording();
   },
@@ -70,8 +78,6 @@ var AudioRecorder = {
   },
   stopRecording: function() {
     AudioRecorderManager.stopRecording();
-    this.subscriptions.forEach(sub => sub.remove());
-    this.subscriptions = null;
   },
   deleteRecording: function() {
     AudioRecorderManager.deleteRecording();
