@@ -40,7 +40,7 @@ var AudioRecorder = {
       }
     );
 
-    var FinishedSubscription = NativeAppEventEmitter.addListener('recordingFinished',
+    var finishedSubscription = NativeAppEventEmitter.addListener('recordingFinished',
       (data) => {
         if (this.onFinished) {
           this.onFinished(data);
@@ -48,7 +48,7 @@ var AudioRecorder = {
       }
     );
 
-    var ErrorSubscription = NativeAppEventEmitter.addListener('recordingError',
+    var errorSubscription = NativeAppEventEmitter.addListener('recordingError',
       (data) => {
         if (this.onError) {
           this.onError(data);
@@ -57,9 +57,9 @@ var AudioRecorder = {
     );
 
     this.subscriptions = [
-      this.progressSubscription,
-      this.FinishedSubscription,
-      this.ErrorSubscription
+      progressSubscription,
+      finishedSubscription,
+      errorSubscription
     ];
   },
   startRecording: function() {
