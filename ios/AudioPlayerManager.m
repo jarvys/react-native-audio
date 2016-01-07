@@ -18,6 +18,7 @@ NSString *const AudioPlayerEventFinished = @"playerFinished";
 @implementation AudioPlayerManager {
 
   AVAudioPlayer *_audioPlayer;
+  NSInteger *_audioSerialId;
 
   NSTimeInterval _currentTime;
   id _progressUpdateTimer;
@@ -37,7 +38,7 @@ RCT_EXPORT_MODULE();
 
   if (_prevProgressUpdateTime == nil ||
    (([_prevProgressUpdateTime timeIntervalSinceNow] * -1000.0) >= _progressUpdateInterval)) {
-      [_bridge.eventDispatcher sendDeviceEventWithName:AudioPlayerEventProgress body:@{
+      [_bridge.eventDispatcher sendAppEventWithName:AudioPlayerEventProgress body:@{
       @"currentTime": [NSNumber numberWithFloat:_currentTime]
     }];
 
@@ -59,13 +60,15 @@ RCT_EXPORT_MODULE();
   [_progressUpdateTimer addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
 }
 
-- (void)AudioPlayerDidFinishPlaying:(AVAudioPlayer *)recorder successfully:(BOOL)flag {
-  [_bridge.eventDispatcher sendDeviceEventWithName:AudioPlayerEventFinished body:@{
-      @"finished": flag ? @"true" : @"false"
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)recorder successfully:(BOOL)flag {
+  [_bridge.eventDispatcher sendAppEventWithName:AudioPlayerEventFinished body:@{
+      @"finished": flag ? @"true" : @"false",
+      @"id": [NSNumber numberWithInteger: _audioSerialId]
     }];
+  _audioSerialId = nil;
 }
 
-RCT_EXPORT_METHOD(play:(NSString *)path)
+RCT_EXPORT_METHOD(play:(NSString *)path serialId:(NSInteger *) serialId)
 {
   NSError *error;
 
@@ -76,9 +79,11 @@ RCT_EXPORT_METHOD(play:(NSString *)path)
 
   NSLog([_audioFileURL absoluteString]);
 
+  _audioSerialId = serialId;
   _audioPlayer = [[AVAudioPlayer alloc]
     initWithContentsOfURL:_audioFileURL
     error:&error];
+  _audioPlayer.delegate = self;
   if (error) {
     [self stopProgressTimer];
     NSLog(@"audio playback loading error: %@", [error localizedDescription]);
@@ -89,12 +94,15 @@ RCT_EXPORT_METHOD(play:(NSString *)path)
   }
 }
 
-RCT_EXPORT_METHOD(playWithUrl:(NSURL *) url)
+RCT_EXPORT_METHOD(playWithUrl:(NSURL *) url serialId:(NSInteger *) serialId)
 {
   NSError *error;
   NSData* data = [NSData dataWithContentsOfURL: url];
 
+  _audioSerialId = serialId;
   _audioPlayer = [[AVAudioPlayer alloc] initWithData:data  error:&error];
+  _audioPlayer.delegate = self;
+
   if (error) {
     [self stopProgressTimer];
     NSLog(@"audio playback loading error: %@", [error localizedDescription]);

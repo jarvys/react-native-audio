@@ -10,12 +10,17 @@ var React, {NativeModules, NativeAppEventEmitter} = require('react-native');
 var AudioPlayerManager = NativeModules.AudioPlayerManager;
 var AudioRecorderManager = NativeModules.AudioRecorderManager;
 
+var counter = 0;
 var AudioPlayer = {
   play: function(path) {
-    AudioPlayerManager.play(path);
+    counter++;
+    AudioPlayerManager.play(path, counter);
+    return counter;
   },
   playWithUrl: function(url) {
-    AudioPlayerManager.playWithUrl(url);
+    counter++;
+    AudioPlayerManager.playWithUrl(url, counter);
+    return counter;
   },
   pause: function() {
     AudioPlayerManager.pause();
@@ -25,6 +30,14 @@ var AudioPlayer = {
     if (this.subscription) {
       this.subscription.remove();
     }
+  },
+
+  addListener: function(event, listener) {
+    if (event !== 'finish') {
+      throw new Error('invalid event type, only support finish event');
+    }
+
+    return NativeAppEventEmitter.addListener('playerFinished', listener);
   }
 };
 
