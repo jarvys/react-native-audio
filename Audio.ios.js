@@ -53,6 +53,14 @@ var AudioRecorder = {
       }
     );
 
+    var peakPowerSubscription = NativeAppEventEmitter.addListener('audioPeakPower',
+      (data) => {
+        if(this.onPeakPower) {
+          this.onPeakPower(data);
+        }
+      }
+    );
+
     var finishedSubscription = NativeAppEventEmitter.addListener('recordingFinished',
       (data) => {
         if (this.onFinished) {
@@ -73,6 +81,7 @@ var AudioRecorder = {
 
     this.subscriptions = [
       progressSubscription,
+      peakPowerSubscription,
       finishedSubscription,
       errorSubscription
     ];

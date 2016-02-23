@@ -15,6 +15,7 @@
 NSString *const AudioRecorderEventProgress = @"recordingProgress";
 NSString *const AudioRecorderEventFinished = @"recordingFinished";
 NSString *const AudioRecorderEventError = @"recordingError";
+NSString *const AudioPeakPower = @"audioPeakPower";
 
 @implementation AudioRecorderManager {
 
@@ -27,6 +28,7 @@ NSString *const AudioRecorderEventError = @"recordingError";
   NSDate *_prevProgressUpdateTime;
   NSURL *_audioFileURL;
   AVAudioSession *_recordSession;
+  NSTimer *_levelTimer;
 }
 
 @synthesize bridge = _bridge;
@@ -114,6 +116,16 @@ RCT_EXPORT_MODULE();
     }];
 }
 
+- (void)levelTimerCallback:(NSTimer *)timer {
+
+  [_audioRecorder updateMeters];
+
+  [self.bridge.eventDispatcher sendAppEventWithName:
+    AudioPeakPower body:@{
+      @"peakPower": [NSNumber numberWithFloat: [_audioRecorder peakPowerForChannel:0]]
+    }];
+}
+
 - (NSString *) applicationDocumentsDirectory
 {
   NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
@@ -169,6 +181,8 @@ RCT_EXPORT_METHOD(prepareRecordingAtPath:(NSString *)path)
       BOOL successfully = [_audioRecorder prepareToRecord];
       if (!successfully) {
         NSLog(@"fail to prepare to record");
+      } else {
+        _audioRecorder.meteringEnabled = YES;
       }
   }
 }
@@ -184,6 +198,11 @@ RCT_EXPORT_METHOD(startRecording)
   BOOL successfully = [_audioRecorder record];
   if (!successfully) {
     NSLog(@"fail to record");
+  } else {
+    [_levelTimer invalidate];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      _levelTimer = [NSTimer scheduledTimerWithTimeInterval: 0.5 target: self selector: @selector(levelTimerCallback:) userInfo: nil repeats: YES];
+    });
   }
 }
 
@@ -193,6 +212,7 @@ RCT_EXPORT_METHOD(stopRecording)
     [_audioRecorder stop];
     [_recordSession setActive:NO error:nil];
     _prevProgressUpdateTime = nil;
+    [_levelTimer invalidate];
   }
 }
 
